@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Sampah Digital</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Public+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#EDF1EC;--surface:#FFFFFF;--ink:#1B2A28;--muted:#5B6B68;--line:#CAD4CD;--accent:#0F6B73;--accent-ink:#FFFFFF;--sack:#E8B931;--danger:#B3412F;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121A19;--surface:#1B2625;--ink:#E7EFEC;--muted:#97A8A4;--line:#2E3D3B;--accent:#4FB7C0;--accent-ink:#0C1514;--sack:#E8B931;--danger:#E58672}}
+:root[data-theme="dark"]{--bg:#121A19;--surface:#1B2625;--ink:#E7EFEC;--muted:#97A8A4;--line:#2E3D3B;--accent:#4FB7C0;--accent-ink:#0C1514;--sack:#E8B931;--danger:#E58672}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;line-height:1.5}
+h1,h2,h3{font-family:"Bricolage Grotesque","Public Sans",system-ui,sans-serif;margin:0}
+.wrap{max-width:960px;margin:0 auto;padding:20px 16px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+header h1{font-size:1.6rem}
+header p{margin:0;color:var(--muted);font-size:.9rem}
+.stock{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:1.5rem}
+.stat span{color:var(--muted);font-size:.85rem}
+.stat.hero{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.stat.hero span{color:inherit;opacity:.85}
+nav{display:flex;gap:4px;overflow-x:auto;border-bottom:2px solid var(--line);margin-bottom:18px}
+nav button{background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-2px;padding:10px 14px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--sack)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.panel+.panel{margin-top:16px}
+.panel h2{font-size:1.15rem;margin-bottom:12px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.btn{padding:10px 18px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+.btn.ghost{background:none;color:var(--danger);border:1px solid var(--line);padding:5px 10px;font-size:.8rem}
+.preview{margin:12px 0 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+td.n,th.n{text-align:right}
+.empty{color:var(--muted);padding:12px 0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;font-weight:600;max-width:90%}
+.toast[hidden]{display:none}
+.err{color:var(--danger)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Bank Sampah Digital</h1>
+      <p>Catat setoran, hitung saldo nasabah, dan kelola harga sampah.</p>
+    </div>
+    <button class="btn ghost" id="reset" style="color:var(--muted)">Reset data</button>
+  </header>
+  <section class="stock" id="stats"></section>
+  <nav role="tablist" id="tabs"></nav>
+  <main id="view"></main>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+var KEY = "bank-sampah-v1";
+var TABS = [["setor","Setor sampah"],["tarik","Tarik saldo"],["nasabah","Nasabah"],["harga","Harga sampah"],["riwayat","Riwayat"]];
+var tab = "setor";
+var db;
+
+function seed(){
+  return {
+    nextId: 3,
+    members: [{id:1,name:"Siti Aminah",phone:"081234567801"},{id:2,name:"Pak Joko",phone:"081234567802"}],
+    prices: [{id:1,name:"Plastik PET (botol)",price:3500},{id:2,name:"Kardus",price:2000},{id:3,name:"Kertas HVS",price:1500},{id:4,name:"Kaleng aluminium",price:9000},{id:5,name:"Besi",price:4000},{id:6,name:"Botol kaca",price:500}],
+    tx: []
+  };
+}
+function load(){
+  try{ var r = localStorage.getItem(KEY); if(r){ db = JSON.parse(r); return; } }catch(e){}
+  db = seed();
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} }
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+function rp(n){ return "Rp" + Math.round(n).toLocaleString("id-ID"); }
+function nid(){ return db.nextId++; }
+function balance(mid){
+  return db.tx.reduce(function(s,t){ return t.memberId===mid ? s + (t.type==="setor" ? t.amount : -t.amount) : s; },0);
+}
+function toast(msg){
+  var t = document.getElementById("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.h); toast.h = setTimeout(function(){ t.hidden = true; },2500);
+}
+function memberOptions(){
+  if(!db.members.length) return '<option value="">Belum ada nasabah</option>';
+  return db.members.map(function(m){ return '<option value="'+m.id+'">'+esc(m.name)+' ('+rp(balance(m.id))+')</option>'; }).join("");
+}
+
+function renderStats(){
+  var kg = db.tx.filter(function(t){return t.type==="setor";}).reduce(function(s,t){return s+t.kg;},0);
+  var total = db.members.reduce(function(s,m){return s+balance(m.id);},0);
+  document.getElementById("stats").innerHTML =
+    '<div class="stat hero"><b>'+kg.toFixed(1).replace(".",",")+' kg</b><span>Sampah terkumpul</span></div>'+
+    '<div class="stat"><b>'+db.members.length+'</b><span>Nasabah terdaftar</span></div>'+
+    '<div class="stat"><b>'+rp(total)+'</b><span>Total saldo nasabah</span></div>'+
+    '<div class="stat"><b>'+db.tx.length+'</b><span>Transaksi tercatat</span></div>';
+}
+function renderTabs(){
+  document.getElementById("tabs").innerHTML = TABS.map(function(t){
+    return '<button role="tab" data-tab="'+t[0]+'" aria-selected="'+(t[0]===tab)+'">'+t[1]+'</button>';
+  }).join("");
+}
+
+var views = {
+  setor: function(){
+    return '<div class="panel"><h2>Catat setoran sampah</h2>'+
+    '<div class="row"><div><label for="s-m">Nasabah</label><select id="s-m">'+memberOptions()+'</select></div>'+
+    '<div><label for="s-j">Jenis sampah</label><select id="s-j">'+db.prices.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+' ('+rp(p.price)+'/kg)</option>';}).join("")+'</select></div>'+
+    '<div><label for="s-k">Berat (kg)</label><input id="s-k" type="number" min="0" step="0.1" inputmode="decimal" placeholder="0,0"></div>'+
+    '<div><button class="btn" id="s-go">Simpan setoran</button></div></div>'+
+    '<p class="preview" id="s-pv"></p><p class="err" id="s-err"></p></div>';
+  },
+  tarik: function(){
+    return '<div class="panel"><h2>Tarik saldo</h2>'+
+    '<div class="row"><div><label for="t-m">Nasabah</label><select id="t-m">'+memberOptions()+'</select></div>'+
+    '<div><label for="t-a">Jumlah (Rp)</label><input id="t-a" type="number" min="0" step="1000" inputmode="numeric"></div>'+
+    '<div><button class="btn" id="t-go">Catat penarikan</button></div></div>'+
+    '<p class="err" id="t-err"></p></div>';
+  },
+  nasabah: function(){
+    var rows = db.members.map(function(m){
+      var kg = db.tx.filter(function(t){return t.memberId===m.id&&t.type==="setor";}).reduce(function(s,t){return s+t.kg;},0);
+      return '<tr><td>'+esc(m.name)+'</td><td>'+esc(m.phone||"-")+'</td><td class="n">'+kg.toFixed(1).replace(".",",")+' kg</td><td class="n">'+rp(balance(m.id))+'</td><td><button class="btn ghost" data-delm="'+m.id+'">Hapus</button></td></tr>';
+    }).join("");
+    return '<div class="panel"><h2>Daftarkan nasabah</h2><div class="row">'+
+    '<div><label for="n-n">Nama</label><input id="n-n" type="text" autocomplete="off"></div>'+
+    '<div><label for="n-p">Nomor HP</label><input id="n-p" type="tel"></div>'+
+    '<div><button class="btn" id="n-go">Tambah nasabah</button></div></div><p class="err" id="n-err"></p></div>'+
+    '<div class="panel"><h2>Daftar nasabah</h2>'+(rows?'<div class="scroll"><table><thead><tr><th>Nama</th><th>HP</th><th class="n">Total setor</th><th class="n">Saldo</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="empty">Belum ada nasabah. Tambahkan nasabah pertama di atas.</p>')+'</div>';
+  },
+  harga: function(){
+    var rows = db.prices.map(function(p){
+      return '<tr><td>'+esc(p.name)+'</td><td class="n"><input type="number" min="0" step="100" value="'+p.price+'" data-price="'+p.id+'" style="width:110px;text-align:right" aria-label="Harga '+esc(p.name)+' per kg"></td><td><button class="btn ghost" data-delp="'+p.id+'">Hapus</button></td></tr>';
+    }).join("");
+    return '<div class="panel"><h2>Harga per kilogram</h2><div class="scroll"><table><thead><tr><th>Jenis</th><th class="n">Rp/kg</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>'+
+    '<div class="panel"><h2>Tambah jenis sampah</h2><div class="row">'+
+    '<div><label for="p-n">Nama jenis</label><input id="p-n" type="text"></div>'+
+    '<div><label for="p-h">Harga per kg (Rp)</label><input id="p-h" type="number" min="0" step="100"></div>'+
+    '<div><button class="btn" id="p-go">Tambah jenis</button></div></div><p class="err" id="p-err"></p></div>';
+  },
+  riwayat: function(){
+    var list = db.tx.slice().reverse();
+    var rows = list.map(function(t){
+      var m = db.members.filter(function(x){return x.id===t.memberId;})[0];
+      var d = new Date(t.date).toLocaleString("id-ID",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+      return '<tr><td>'+d+'</td><td>'+esc(m?m.name:"(dihapus)")+'</td><td>'+(t.type==="setor"?esc(t.item)+' '+String(t.kg).replace(".",",")+' kg':'Penarikan')+'</td><td class="n">'+(t.type==="setor"?'+':'−')+rp(t.amount)+'</td></tr>';
+    }).join("");
+    return '<div class="panel"><h2>Riwayat transaksi</h2>'+(rows?'<div class="scroll"><table><thead><tr><th>Waktu</th><th>Nasabah</th><th>Keterangan</th><th class="n">Nilai</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="empty">Belum ada transaksi. Catat setoran pertama di tab Setor sampah.</p>')+'</div>';
+  }
+};
+
+function render(){
+  renderStats(); renderTabs();
+  document.getElementById("view").innerHTML = views[tab]();
+  if(tab==="setor"){ ["s-m","s-j","s-k"].forEach(function(i){ document.getElementById(i).addEventListener("input",preview); }); }
+}
+function preview(){
+  var p = db.prices.filter(function(x){return x.id==document.getElementById("s-j").value;})[0];
+  var kg = parseFloat(document.getElementById("s-k").value);
+  document.getElementById("s-pv").textContent = (p && kg>0) ? "Nilai setoran: " + rp(p.price*kg) : "";
+}
+function setErr(id,msg){ var e = document.getElementById(id); if(e) e.textContent = msg; }
+
+document.addEventListener("click",function(e){
+  var t = e.target, id = t.id;
+  if(t.dataset.tab){ tab = t.dataset.tab; render(); return; }
+  if(id==="reset"){ if(confirm("Hapus semua data dan kembali ke contoh awal?")){ db = seed(); save(); render(); toast("Data direset"); } return; }
+  if(id==="s-go"){
+    var mid = parseInt(document.getElementById("s-m").value,10);
+    var p = db.prices.filter(function(x){return x.id==document.getElementById("s-j").value;})[0];
+    var kg = parseFloat(document.getElementById("s-k").value);
+    if(!mid) return setErr("s-err","Pilih nasabah terlebih dahulu. Tambahkan di tab Nasabah jika belum ada.");
+    if(!p) return setErr("s-err","Tambahkan jenis sampah di tab Harga sampah.");
+    if(!(kg>0)) return setErr("s-err","Isi berat lebih dari 0 kg.");
+    db.tx.push({id:nid(),type:"setor",memberId:mid,item:p.name,kg:kg,amount:Math.round(p.price*kg),date:Date.now()});
+    save(); render(); toast("Setoran disimpan");
+  }
+  if(id==="t-go"){
+    var m2 = parseInt(document.getElementById("t-m").value,10);
+    var a = parseInt(document.getElementById("t-a").value,10);
+    if(!m2) return setErr("t-err","Pilih nasabah terlebih dahulu.");
+    if(!(a>0)) return setErr("t-err","Isi jumlah penarikan lebih dari Rp0.");
+    if(a>balance(m2)) return setErr("t-err","Saldo tidak cukup. Saldo saat ini "+rp(balance(m2))+".");
+    db.tx.push({id:nid(),type:"tarik",memberId:m2,amount:a,date:Date.now()});
+    save(); render(); toast("Penarikan dicatat");
+  }
+  if(id==="n-go"){
+    var nm = document.getElementById("n-n").value.trim();
+    if(!nm) return setErr("n-err","Isi nama nasabah.");
+    db.members.push({id:nid(),name:nm,phone:document.getElementById("n-p").value.trim()});
+    save(); render(); toast("Nasabah ditambahkan");
+  }
+  if(t.dataset.delm){
+    var d = parseInt(t.dataset.delm,10);
+    if(balance(d)>0 && !confirm("Nasabah ini masih punya saldo. Tetap hapus?")) return;
+    db.members = db.members.filter(function(x){return x.id!==d;}); save(); render();
+  }
+  if(id==="p-go"){
+    var pn = document.getElementById("p-n").value.trim(), ph = parseInt(document.getElementById("p-h").value,10);
+    if(!pn || !(ph>=0)) return setErr("p-err","Isi nama jenis dan harga per kg.");
+    db.prices.push({id:nid(),name:pn,price:ph}); save(); render(); toast("Jenis sampah ditambahkan");
+  }
+  if(t.dataset.delp){
+    var dp = parseInt(t.dataset.delp,10);
+    db.prices = db.prices.filter(function(x){return x.id!==dp;}); save(); render();
+  }
+});
+document.addEventListener("change",function(e){
+  if(e.target.dataset.price){
+    var p = db.prices.filter(function(x){return x.id==e.target.dataset.price;})[0];
+    var v = parseInt(e.target.value,10);
+    if(p && v>=0){ p.price = v; save(); toast("Harga diperbarui"); }
+  }
+});
+
+load(); render();
+</script>
+</body>
+</html>
